@@ -12,27 +12,32 @@
 #define SEM_READ "/sem_read"
 #define BUF_SIZE 256
 
+void write_error(const char *msg) {
+    write(STDERR_FILENO, msg, strlen(msg));
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
+        const char msg[] = "Usage: ./parent <filename>\n";
+        write(STDERR_FILENO, msg, sizeof(msg) - 1);
         exit(EXIT_FAILURE);
     }
 
     FILE *file = fopen(argv[1], "r");
     if (!file) {
-        perror("Error opening file");
+        write_error("Error opening file\n");
         exit(EXIT_FAILURE);
     }
 
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
-        perror("Error creating shared memory");
+        write_error("Error creating shared memory\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
 
     if (ftruncate(shm_fd, BUF_SIZE) == -1) {
-        perror("Error setting shared memory size");
+        write_error("Error setting shared memory size\n");
         fclose(file);
         shm_unlink(SHM_NAME);
         exit(EXIT_FAILURE);
@@ -40,7 +45,7 @@ int main(int argc, char *argv[]) {
 
     char *shm_ptr = mmap(0, BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm_ptr == MAP_FAILED) {
-        perror("Error mapping shared memory");
+        write_error("Error mapping shared memory\n");
         fclose(file);
         shm_unlink(SHM_NAME);
         exit(EXIT_FAILURE);
@@ -49,7 +54,7 @@ int main(int argc, char *argv[]) {
     sem_t *sem_write = sem_open(SEM_WRITE, O_CREAT, 0666, 1);
     sem_t *sem_read = sem_open(SEM_READ, O_CREAT, 0666, 0);
     if (sem_write == SEM_FAILED || sem_read == SEM_FAILED) {
-        perror("Error creating semaphores");
+        write_error("Error creating semaphores\n");
         fclose(file);
         shm_unlink(SHM_NAME);
         exit(EXIT_FAILURE);
@@ -58,7 +63,7 @@ int main(int argc, char *argv[]) {
     pid_t pid = fork();
     if (pid == 0) {
         execl("./child", "./child", NULL);
-        perror("Error executing child process");
+        write_error("Error executing child process\n");
         exit(EXIT_FAILURE);
     } else if (pid > 0) {
         char buffer[BUF_SIZE];
@@ -71,7 +76,6 @@ int main(int argc, char *argv[]) {
         sem_wait(sem_write);
         shm_ptr[0] = '\0';
         sem_post(sem_read);
-
 
         wait(NULL);
 
@@ -86,4 +90,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-

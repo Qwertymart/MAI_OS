@@ -11,6 +11,16 @@
 #define SEM_READ "/sem_read"
 #define BUF_SIZE 256
 
+void write_error(const char *msg) {
+    write(STDERR_FILENO, msg, strlen(msg));
+}
+
+void write_message(const char *msg, int num) {
+    char buffer[BUF_SIZE];
+    int len = snprintf(buffer, BUF_SIZE, msg, num);
+    write(STDOUT_FILENO, buffer, len);
+}
+
 int str_to_int(const char *str, int *num) {
     char *endptr;
     long val = strtol(str, &endptr, 10);
@@ -36,20 +46,20 @@ void remove_carriage_return(char *str) {
 int main() {
     int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
     if (shm_fd == -1) {
-        perror("Error opening shared memory");
+        write_error("Error opening shared memory\n");
         exit(EXIT_FAILURE);
     }
 
     char *shm_ptr = mmap(0, BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm_ptr == MAP_FAILED) {
-        perror("Error mapping shared memory");
+        write_error("Error mapping shared memory\n");
         exit(EXIT_FAILURE);
     }
 
     sem_t *sem_write = sem_open(SEM_WRITE, 0);
     sem_t *sem_read = sem_open(SEM_READ, 0);
     if (sem_write == SEM_FAILED || sem_read == SEM_FAILED) {
-        perror("Error opening semaphores");
+        write_error("Error opening semaphores\n");
         exit(EXIT_FAILURE);
     }
 
@@ -70,7 +80,9 @@ int main() {
         while (token != NULL) {
             int num;
             if (!str_to_int(token, &num)) {
-                fprintf(stderr, "Invalid number in line %d: %s\n", line, token);
+                char buffer[BUF_SIZE];
+                int len = snprintf(buffer, BUF_SIZE, "Invalid number in line %d: %s\n", line, token);
+                write(STDERR_FILENO, buffer, len);
                 valid_line = 0;
                 break;
             }
@@ -79,7 +91,7 @@ int main() {
         }
 
         if (valid_line) {
-            printf("Sum in line %d = %d\n", line, line_sum);
+            write_message("Sum in line %d = %d\n", line);
         }
 
         line++;

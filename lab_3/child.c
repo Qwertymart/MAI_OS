@@ -15,20 +15,18 @@ void write_error(const char *msg) {
     write(STDERR_FILENO, msg, strlen(msg));
 }
 
-void write_message(const char *msg, int num) {
+void write_message(const char *msg, int line, int sum) {
     char buffer[BUF_SIZE];
-    int len = snprintf(buffer, BUF_SIZE, msg, num);
+    int len = snprintf(buffer, BUF_SIZE, msg, line, sum);
     write(STDOUT_FILENO, buffer, len);
 }
 
 int str_to_int(const char *str, int *num) {
     char *endptr;
     long val = strtol(str, &endptr, 10);
-
     if (str == endptr || *endptr != '\0') {
         return 0;
     }
-
     *num = (int)val;
     return 1;
 }
@@ -64,6 +62,7 @@ int main() {
     }
 
     int line = 1;
+
     while (1) {
         sem_wait(sem_read);
 
@@ -73,25 +72,29 @@ int main() {
 
         remove_carriage_return(shm_ptr);
 
-        char *token = strtok(shm_ptr, " ");
+        char buffer[BUF_SIZE];
+        strncpy(buffer, shm_ptr, BUF_SIZE);
+        buffer[BUF_SIZE - 1] = '\0';
+
+        char *token = strtok(buffer, " ");
         int line_sum = 0;
         int valid_line = 1;
 
         while (token != NULL) {
             int num;
             if (!str_to_int(token, &num)) {
-                char buffer[BUF_SIZE];
-                int len = snprintf(buffer, BUF_SIZE, "Invalid number in line %d: %s\n", line, token);
-                write(STDERR_FILENO, buffer, len);
+                char err_buf[BUF_SIZE];
+                int len = snprintf(err_buf, BUF_SIZE, "Invalid number in line %d: %s\n", line, token);
+                write(STDERR_FILENO, err_buf, len);
                 valid_line = 0;
-                break;
+            } else {
+                line_sum += num;
             }
-            line_sum += num;
             token = strtok(NULL, " ");
         }
 
         if (valid_line) {
-            write_message("Sum in line %d = %d\n", line);
+            write_message("Sum in line %d = %d\n", line, line_sum);
         }
 
         line++;
@@ -101,6 +104,8 @@ int main() {
     munmap(shm_ptr, BUF_SIZE);
     sem_close(sem_write);
     sem_close(sem_read);
+    sem_unlink(SEM_WRITE);
+    sem_unlink(SEM_READ);
 
     return 0;
 }
